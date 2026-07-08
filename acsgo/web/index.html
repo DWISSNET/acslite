@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACSGO — TR-069 ACS Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --accent: #38bdf8;
+      --accent2: #818cf8;
+      --success: #34d399;
+      --danger: #f87171;
+      --warning: #fbbf24;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --border: #2d3f55;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; color: var(--accent); }
+    .logo-icon { font-size: 28px; }
+    .user-info { color: var(--muted); font-size: 14px; cursor: pointer; }
+    .user-info:hover { color: var(--text); }
+
+    main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Sidebar */
+    nav {
+      width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 0;
+      flex-shrink: 0;
+    }
+    nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 24px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    nav a:hover, nav a.active { color: var(--text); background: var(--surface2); }
+    nav a.active { border-left: 3px solid var(--accent); padding-left: 21px; }
+
+    /* Content */
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+
+    /* Stats Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: 700; }
+    .stat-value.green { color: var(--success); }
+    .stat-value.red   { color: var(--danger); }
+    .stat-value.blue  { color: var(--accent); }
+    .stat-value.purple{ color: var(--accent2); }
+
+    /* Table */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .table-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .table-header h2 { font-size: 16px; font-weight: 600; }
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    input[type=text], select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    input[type=text]:focus, select:focus { border-color: var(--accent); }
+    button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    button.danger { background: var(--danger); }
+    button.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--surface2); }
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .badge.online  { background: rgba(52,211,153,0.15); color: var(--success); }
+    .badge.offline { background: rgba(248,113,113,0.15); color: var(--danger); }
+    .badge.dot::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .actions { display: flex; gap: 6px; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* Live events log */
+    #event-log {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .event-entry { padding: 2px 0; }
+    .event-entry .ts { color: var(--surface2); }
+    .event-entry .ev { color: var(--accent); }
+
+    /* Toast */
+    #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      min-width: 280px;
+      animation: slideIn 0.2s ease;
+    }
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error   { border-left: 3px solid var(--danger); }
+    @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    /* Pagination */
+    .pagination { display: flex; align-items: center; gap: 8px; padding: 16px; justify-content: flex-end; }
+    .pagination span { color: var(--muted); font-size: 13px; }
+    .page-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+    .ws-status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+    .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+    .ws-dot.connected { background: var(--success); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <span class="logo-icon">📡</span>
+    ACSGO
+  </div>
+  <div style="display:flex;gap:20px;align-items:center;">
+    <div class="ws-status"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Connecting…</span></div>
+    <div class="user-info" onclick="logout()">👤 Admin ▾</div>
+  </div>
+</header>
+
+<main>
+  <nav>
+    <a class="active" onclick="showPage('devices')">📱 Devices</a>
+    <a onclick="showPage('commands')">⚙️ Commands</a>
+    <a onclick="showPage('analytics')">📊 Analytics</a>
+    <a onclick="showPage('events')">🔔 Live Events</a>
+    <a onclick="showPage('settings')">🔧 Settings</a>
+  </nav>
+
+  <div class="content" id="content-devices">
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="stat-label">Total Devices</div><div class="stat-value blue" id="stat-total">—</div></div>
+      <div class="stat-card"><div class="stat-label">Online</div><div class="stat-value green" id="stat-online">—</div></div>
+      <div class="stat-card"><div class="stat-label">Offline</div><div class="stat-value red" id="stat-offline">—</div></div>
+      <div class="stat-card"><div class="stat-label">WS Clients</div><div class="stat-value purple" id="stat-ws">—</div></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="table-card">
+      <div class="table-header">
+        <h2>Devices</h2>
+        <div class="filters">
+          <input type="text" id="search" placeholder="🔍 Search…" oninput="loadDevices()" style="width:200px">
+          <select id="filter-status" onchange="loadDevices()">
+            <option value="">All Status</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
+          <select id="filter-mfr" onchange="loadDevices()">
+            <option value="">All Manufacturers</option>
+            <option>Huawei</option><option>ZTE</option><option>TP-Link</option>
+            <option>MikroTik</option><option>D-Link</option>
+          </select>
+          <button onclick="loadDevices()">Refresh</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Device ID</th>
+            <th>Manufacturer / Model</th>
+            <th>IP Address</th>
+            <th>Status</th>
+            <th>Last Inform</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="device-table-body">
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px">Loading devices…</td></tr>
+        </tbody>
+      </table>
+
+      <div class="pagination">
+        <span id="pagination-info"></span>
+        <button class="page-btn" id="btn-prev" onclick="prevPage()">← Prev</button>
+        <button class="page-btn" id="btn-next" onclick="nextPage()">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Events Page -->
+  <div class="content" id="content-events" style="display:none">
+    <div class="table-card" style="padding:20px;">
+      <h2 style="margin-bottom:16px;">🔔 Live Device Events</h2>
+      <div id="event-log"><div class="event-entry" style="color:var(--muted)">Waiting for events…</div></div>
+    </div>
+  </div>
+
+  <!-- Analytics Page -->
+  <div class="content" id="content-analytics" style="display:none">
+    <div class="table-card" style="padding:20px;">
+      <h2>📊 Analytics</h2>
+      <p style="color:var(--muted);margin-top:16px;">
+        Connect Grafana to <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;">http://acsgo:9090/metrics</code>
+        for real-time dashboards. Prometheus scrape endpoint is live.
+      </p>
+    </div>
+  </div>
+
+  <!-- Commands Page -->
+  <div class="content" id="content-commands" style="display:none">
+    <div class="table-card" style="padding:20px;">
+      <h2 style="margin-bottom:16px;">⚙️ Send Bulk Command</h2>
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:500px;">
+        <input type="text" id="bulk-device-ids" placeholder="Device IDs (comma-separated)">
+        <select id="bulk-cmd-type">
+          <option value="Reboot">Reboot</option>
+          <option value="FactoryReset">Factory Reset</option>
+          <option value="GetParameterValues">Get Parameters</option>
+        </select>
+        <button onclick="sendBulkCommand()">📤 Send Command</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Page -->
+  <div class="content" id="content-settings" style="display:none">
+    <div class="table-card" style="padding:20px;">
+      <h2>🔧 Settings</h2>
+      <p style="color:var(--muted);margin-top:16px;">
+        API URL: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;" id="api-url-display"></code>
+      </p>
+    </div>
+  </div>
+</main>
+
+<div id="toast-container"></div>
+
+<script>
+const API = '';  // Same origin
+const token = localStorage.getItem('acsgo_token');
+let currentPage = 0;
+const PAGE_SIZE = 50;
+let ws;
+
+if (!token) { window.location.href = '/login'; }
+
+// ── WebSocket ──────────────────────────────────────────────────────────
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${protocol}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('ws-dot').classList.add('connected');
+    document.getElementById('ws-label').textContent = 'Live';
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-dot').classList.remove('connected');
+    document.getElementById('ws-label').textContent = 'Reconnecting…';
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    appendEvent(msg);
+    if (msg.type === 'device.online' || msg.type === 'device.offline') {
+      loadDevices();
+      loadStats();
+    }
+  };
+}
+connectWS();
+
+// ── API helpers ────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {})
+    }
+  });
+  if (res.status === 401) { logout(); return null; }
+  return res.json();
+}
+
+// ── Devices ────────────────────────────────────────────────────────────
+async function loadDevices() {
+  const search  = document.getElementById('search').value;
+  const status  = document.getElementById('filter-status').value;
+  const mfr     = document.getElementById('filter-mfr').value;
+  const params  = new URLSearchParams({
+    limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE,
+    ...(search  && { search }),
+    ...(status  && { status }),
+    ...(mfr     && { manufacturer: mfr }),
+  });
+  const data = await apiFetch(`/api/devices?${params}`);
+  if (!data) return;
+  renderDevices(data.data || [], data.total || 0);
+}
+
+function renderDevices(devices, total) {
+  const tbody = document.getElementById('device-table-body');
+  if (!devices.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px">No devices found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = devices.map(d => `
+    <tr>
+      <td style="font-family:monospace;font-size:12px">${esc(d.device_id)}</td>
+      <td>${esc(d.manufacturer || '—')} / ${esc(d.model_name || '—')}</td>
+      <td>${esc(d.ip_address || '—')}</td>
+      <td><span class="badge dot ${d.connection_status}">${d.connection_status}</span></td>
+      <td>${d.last_inform ? new Date(d.last_inform).toLocaleString() : '—'}</td>
+      <td>
+        <div class="actions">
+          <button class="btn-sm" onclick="sendCmd('${esc(d.id)}','Reboot')">🔄 Reboot</button>
+          <button class="btn-sm outline" onclick="viewDevice('${esc(d.id)}')">👁 View</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  const info = document.getElementById('pagination-info');
+  const start = currentPage * PAGE_SIZE + 1;
+  const end   = Math.min(start + devices.length - 1, total);
+  info.textContent = `${start}–${end} of ${total}`;
+  document.getElementById('btn-prev').disabled = currentPage === 0;
+  document.getElementById('btn-next').disabled = end >= total;
+}
+
+async function sendCmd(deviceId, type) {
+  const data = await apiFetch(`/api/devices/${deviceId}/command`, {
+    method: 'POST',
+    body: JSON.stringify({ type })
+  });
+  if (data) toast(`✅ ${type} command queued`, 'success');
+  else toast(`❌ Failed to queue ${type}`, 'error');
+}
+
+function viewDevice(id) {
+  toast('📱 Device detail coming soon — use /api/devices/' + id, 'success');
+}
+
+function prevPage() { if (currentPage > 0) { currentPage--; loadDevices(); } }
+function nextPage() { currentPage++; loadDevices(); }
+
+// ── Stats ──────────────────────────────────────────────────────────────
+async function loadStats() {
+  const [online, offline, all] = await Promise.all([
+    apiFetch('/api/devices?status=online&limit=1'),
+    apiFetch('/api/devices?status=offline&limit=1'),
+    apiFetch('/api/devices?limit=1'),
+  ]);
+  if (all)     document.getElementById('stat-total').textContent   = all.total || 0;
+  if (online)  document.getElementById('stat-online').textContent  = online.total || 0;
+  if (offline) document.getElementById('stat-offline').textContent = offline.total || 0;
+}
+
+// ── Bulk command ───────────────────────────────────────────────────────
+async function sendBulkCommand() {
+  const ids  = document.getElementById('bulk-device-ids').value.split(',').map(s => s.trim()).filter(Boolean);
+  const type = document.getElementById('bulk-cmd-type').value;
+  if (!ids.length) { toast('Enter device IDs', 'error'); return; }
+  const data = await apiFetch('/api/devices/bulk-command', {
+    method: 'POST',
+    body: JSON.stringify({ device_ids: ids, type })
+  });
+  if (data) toast(`✅ Queued ${data.queued}/${data.total} commands`, 'success');
+}
+
+// ── Live events ────────────────────────────────────────────────────────
+function appendEvent(msg) {
+  const log = document.getElementById('event-log');
+  const el  = document.createElement('div');
+  el.className = 'event-entry';
+  el.innerHTML = `<span class="ts">${new Date(msg.timestamp).toLocaleTimeString()}</span> <span class="ev">${esc(msg.type)}</span> ${esc(msg.data?.device_id || '')}`;
+  log.insertBefore(el, log.firstChild);
+  if (log.children.length > 200) log.removeChild(log.lastChild);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────
+function showPage(page) {
+  ['devices','events','analytics','commands','settings'].forEach(p => {
+    const el = document.getElementById('content-' + p);
+    if (el) el.style.display = p === page ? '' : 'none';
+  });
+  document.querySelectorAll('nav a').forEach((a, i) => {
+    a.classList.toggle('active', ['devices','commands','analytics','events','settings'][i] === page);
+  });
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function logout() {
+  localStorage.removeItem('acsgo_token');
+  window.location.href = '/login';
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+document.getElementById('api-url-display').textContent = location.origin + '/api';
+loadDevices();
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

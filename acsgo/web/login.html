@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACSGO — Login</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #2d3f55;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .logo {
+      text-align: center;
+      font-size: 48px;
+      margin-bottom: 8px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 32px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+    input {
+      width: 100%;
+      background: #334155;
+      border: 1px solid #2d3f55;
+      color: #e2e8f0;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: #38bdf8; }
+    button {
+      width: 100%;
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 24px;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.88; }
+    .error {
+      background: rgba(248,113,113,0.15);
+      border: 1px solid rgba(248,113,113,0.4);
+      color: #f87171;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">📡</div>
+    <h1>ACSGO</h1>
+    <p class="subtitle">High-Performance TR-069 ACS Server</p>
+    <form onsubmit="login(event)">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="admin" autocomplete="username" required>
+      <label>Password</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
+      <div class="error" id="error-msg"></div>
+      <button type="submit">Sign In →</button>
+    </form>
+  </div>
+
+  <script>
+    if (localStorage.getItem('acsgo_token')) {
+      window.location.href = '/dashboard';
+    }
+
+    async function login(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errEl    = document.getElementById('error-msg');
+      errEl.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errEl.textContent = data.error || 'Login failed';
+          errEl.style.display = 'block';
+          return;
+        }
+        localStorage.setItem('acsgo_token', data.token);
+        window.location.href = '/dashboard';
+      } catch (err) {
+        errEl.textContent = 'Network error — is the server running?';
+        errEl.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>

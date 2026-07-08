@@ -1,0 +1,133 @@
+version: '3.8'
+
+# ACSGO — High-performance distributed TR-069 ACS server
+# Usage: docker compose -f docker-compose.acsgo.yml up -d
+
+services:
+
+  # ── PostgreSQL 15 ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: acsgo-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB:       acsgo
+      POSTGRES_USER:     acsgo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acsgo_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acsgo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 7 ────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: acsgo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── RabbitMQ 3 ─────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: acsgo-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-acsgo}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq_secret}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── ACSGO Server ───────────────────────────────────────────────────────
+  acsgo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: acsgo-server
+    restart: unless-stopped
+    ports:
+      - "7547:7547"   # TR-069/CWMP
+      - "7548:7548"   # REST API / Dashboard / WebSocket
+      - "9090:9090"   # Prometheus metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENV:            production
+      DATABASE_URL:   postgres://acsgo:${POSTGRES_PASSWORD:-acsgo_secret}@postgres:5432/acsgo?sslmode=disable
+      REDIS_URL:      redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
+      RABBITMQ_URL:   amqp://${RABBITMQ_USER:-acsgo}:${RABBITMQ_PASSWORD:-rabbitmq_secret}@rabbitmq:5672/
+      JWT_SECRET:     ${JWT_SECRET:-change-me-in-production}
+      ACS_USERNAME:   ${ACS_USERNAME:-acsadmin}
+      ACS_PASSWORD:   ${ACS_PASSWORD:-}
+      LOG_LEVEL:      ${LOG_LEVEL:-info}
+      PROMETHEUS_ENABLED: "true"
+      CWMP_PORT:      7547
+      PORT:           7548
+      METRICS_PORT:   9090
+    volumes:
+      - ./firmware:/opt/acsgo/firmware
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7548/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Prometheus ─────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: acsgo-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+
+  # ── Grafana ────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: acsgo-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
