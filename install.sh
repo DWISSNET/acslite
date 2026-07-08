@@ -4,7 +4,7 @@ set -euo pipefail
 # Go-first ACS installer for DWISSNET/acslite
 # Default database is SQLite. To use PostgreSQL, set at install time:
 #   DB_TYPE=postgres
-#   DB_URL='******127.0.0.1:5432/acsgo?sslmode=disable'
+#   DB_URL='postgres://user:pass@127.0.0.1:5432/acsgo?sslmode=disable'
 # Optional env overrides accepted by installer: PORT, CWMP_PORT, ADMIN_EMAIL,
 # ADMIN_PASSWORD, JWT_SECRET, DB_TYPE, DB_URL.
 

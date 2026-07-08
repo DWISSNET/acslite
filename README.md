@@ -21,7 +21,7 @@ Set environment variables before running installer:
 
 ```bash
 DB_TYPE=postgres \
-DB_URL='******127.0.0.1:5432/acsgo?sslmode=disable' \
+DB_URL='postgres://user:pass@127.0.0.1:5432/acsgo?sslmode=disable' \
 PORT=7548 \
 CWMP_PORT=7547 \
 ADMIN_EMAIL=admin@acsgo.local \
