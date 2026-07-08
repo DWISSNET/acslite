@@ -1,4 +1,3 @@
-$correctServerTs = @"
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -9,6 +8,8 @@ import { startCWMPserver } from './services/cwmp/server';
 import { redisClient } from './config/redis';
 import logger from './utils/logger';
 import routes from './routes';
+import authRoutes from './routes/auth';
+import { authenticate } from './middleware/auth';
 import './services/scheduler';
 
 // Declare global io type untuk TypeScript
@@ -27,8 +28,9 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files untuk dashboard
+// Serve static files untuk login & dashboard
 app.use(express.static('public'));
+app.use('/login', express.static('public/login.html'));
 app.use('/dashboard', express.static('public/dashboard'));
 
 // Socket.IO untuk realtime dashboard
@@ -36,8 +38,10 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-// API Routes
-app.use('/api', routes);
+// Auth routes (tidak diproteksi)
+app.use('/api/auth', authRoutes);
+// Protek semua API lainnya dengan auth middleware
+app.use('/api', authenticate, routes);
 
 // Initialize semua services
 async function initialize() {
@@ -57,6 +61,7 @@ async function initialize() {
     // Web server listen di SEMUA interface (bukan cuma localhost!)
     server.listen(WEB_PORT, '0.0.0.0', () => {
       logger.info(`✅ Web Server running on http://0.0.0.0:${WEB_PORT}`);
+      logger.info(`✅ Login page: http://0.0.0.0:${WEB_PORT}/login`);
       logger.info(`✅ Dashboard: http://0.0.0.0:${WEB_PORT}/dashboard`);
       logger.info(`✅ CWMP/TR-069: :${CWMP_PORT} (standar ACS port)`);
     });
@@ -76,5 +81,3 @@ async function initialize() {
 }
 
 initialize();
-"@
-Set-Content -Path "h:\AUTO INSTALER GENIEACS\src\server.ts" -Value $correctServerTs

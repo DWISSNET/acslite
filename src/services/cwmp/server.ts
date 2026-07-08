@@ -35,7 +35,7 @@ export async function startCWMPserver(server: Server) {
 
       const body = envelope['SOAP-ENV:Body'][0];
       const rpcMethod = Object.keys(body)[0];
-      const deviceIp = req.ip || req.socket.remoteAddress;
+      const deviceIp = req.ip || req.socket?.remoteAddress || 'unknown';
 
       logger.info(`📡 CWMP: ${rpcMethod} from ${deviceIp}`);
 
