@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -94,10 +96,27 @@ const dashboardHTML = `<!doctype html>
     async function loadDevices() {
       const r = await fetch('/api/devices');
       const payload = await r.json();
-      const rows = payload.devices.map(function(d) {
-        return '<tr><td>' + d.id + '</td><td>' + d.name + '</td><td>' + d.status + '</td><td>' + d.last_seen_at + '</td></tr>';
-      }).join('');
-      document.getElementById('devices').innerHTML = rows || '<tr><td colspan="4">No devices</td></tr>';
+      const tbody = document.getElementById('devices');
+      tbody.innerHTML = '';
+      const list = payload.devices || [];
+      if (list.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.setAttribute('colspan', '4');
+        td.textContent = 'No devices';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      } else {
+        list.forEach(function(d) {
+          const tr = document.createElement('tr');
+          [d.id, d.name, d.status, d.last_seen_at].forEach(function(val) {
+            const td = document.createElement('td');
+            td.textContent = val || '';
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
     }
     function parseBulkInput(input) {
       return input.split('\n').map(function(line) { return line.trim(); }).filter(Boolean).map(function(line) {
@@ -133,6 +152,7 @@ const dashboardHTML = `<!doctype html>
 
 func main() {
 	cfg := loadConfig()
+	warnInsecureDefaults(cfg)
 	db, err := openDB(cfg)
 	if err != nil {
 		log.Fatalf("database setup failed: %v", err)
@@ -141,10 +161,30 @@ func main() {
 
 	mux := newMux(cfg, db)
 
-	addr := ":" + cfg.Port
-	log.Printf("acsgo listening on %s (cwmp_port=%s db_type=%s)", addr, cfg.CWMPPort, cfg.DBType)
-	if err := http.ListenAndServe(addr, mux); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		log.Printf("acsgo listening on %s (cwmp_port=%s db_type=%s)", srv.Addr, cfg.CWMPPort, cfg.DBType)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Print("shutting down gracefully...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("graceful shutdown error: %v", err)
 	}
 }
 
@@ -175,7 +215,11 @@ func newMux(cfg config, db *sql.DB) *http.ServeMux {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, dashboardHTML)
 	})
-	mux.HandleFunc("/api/stats", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		state.mu.RLock()
 		total := len(state.devices)
 		online := 0
@@ -197,7 +241,11 @@ func newMux(cfg config, db *sql.DB) *http.ServeMux {
 			"uptime_seconds": strconv.FormatInt(int64(time.Since(started).Seconds()), 10),
 		})
 	})
-	mux.HandleFunc("/api/devices", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/devices", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		state.mu.RLock()
 		devices := append([]device(nil), state.devices...)
 		state.mu.RUnlock()
@@ -210,6 +258,7 @@ func newMux(cfg config, db *sql.DB) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB limit
 		var payload struct {
 			Devices []device `json:"devices"`
 		}
@@ -263,8 +312,8 @@ func loadConfig() config {
 		DBType:        strings.ToLower(getEnv("DB_TYPE", "sqlite")),
 		DBURL:         getEnv("DB_URL", "./data/acsgo.db"),
 		AdminEmail:    getEnv("ADMIN_EMAIL", "admin@acsgo.local"),
-		AdminPassword: getEnv("ADMIN_PASSWORD", "admin123"),
-		JWTSecret:     getEnv("JWT_SECRET", "change-me"),
+		AdminPassword: getEnv("ADMIN_PASSWORD", "change-me"),
+		JWTSecret:     getEnv("JWT_SECRET", "change-this-secret"),
 	}
 	if cfg.DBType == "" {
 		cfg.DBType = "sqlite"
@@ -275,19 +324,42 @@ func loadConfig() config {
 	return cfg
 }
 
+func warnInsecureDefaults(cfg config) {
+	if cfg.JWTSecret == "change-me" || cfg.JWTSecret == "change-this-secret" {
+		log.Print("WARNING: JWT_SECRET is set to the default value; set a strong random secret before production use")
+	}
+	if cfg.AdminPassword == "admin123" || cfg.AdminPassword == "change-me" {
+		log.Print("WARNING: ADMIN_PASSWORD is set to the default value; change it before production use")
+	}
+}
+
 func openDB(cfg config) (*sql.DB, error) {
+	var (
+		db  *sql.DB
+		err error
+	)
 	switch cfg.DBType {
 	case "postgres", "postgresql":
 		if cfg.DBURL == "" {
 			return nil, errors.New("DB_URL is required when DB_TYPE=postgres")
 		}
-		return sql.Open("postgres", cfg.DBURL)
+		db, err = sql.Open("postgres", cfg.DBURL)
 	case "sqlite", "sqlite3", "":
 		ensureSQLitePath(cfg.DBURL)
-		return sql.Open("sqlite", cfg.DBURL)
+		db, err = sql.Open("sqlite", cfg.DBURL)
 	default:
 		return nil, fmt.Errorf("unsupported DB_TYPE %q (supported: sqlite, postgres)", cfg.DBType)
 	}
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if pingErr := db.PingContext(ctx); pingErr != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("database ping failed: %w", pingErr)
+	}
+	return db, nil
 }
 
 func ensureSQLitePath(dbURL string) {

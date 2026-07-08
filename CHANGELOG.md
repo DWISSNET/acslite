@@ -1,35 +1,27 @@
-# Changelog - Advanced ACS Server
+# Changelog - ACSGO (Go-first ACSLite)
+
+## [Unreleased]
+### 🔒 Security
+- Fix XSS vulnerability in dashboard: device fields now rendered with `textContent` instead of raw `innerHTML`
+- Add request body size limit (1 MiB) on `/api/devices/import` to prevent DoS via large payloads
+- Default `ADMIN_PASSWORD` changed from `admin123` to `change-me` to match installer/`.env.example`
+- Warn at startup when `JWT_SECRET` or `ADMIN_PASSWORD` are still set to insecure default values
+
+### 🚀 Improvements
+- Add graceful shutdown: server handles `SIGTERM`/`SIGINT` and drains in-flight requests before exiting
+- Add HTTP server timeouts (`ReadTimeout: 15s`, `WriteTimeout: 30s`, `IdleTimeout: 60s`)
+- Verify database connectivity with `PingContext` immediately after `sql.Open`
+- Restrict `/api/stats` and `/api/devices` to `GET` only; return `405` for other methods
+- Go binary (`/acsgo`) added to `.gitignore`; build artifact removed from repository tracking
+- Fix PostgreSQL DSN example in `README.md` and `install.sh` (was masked with `******`)
 
 ## [1.0.0] - 2026-01-08
-### 🎉 Initial Release
-- ✅ Full TR-069/CWMP server compliance
-- ✅ Dukungan SEMUA modem populer di Indonesia:
-  - Huawei: HG8245H, HG8546M, EG8141A5, EG8145V5, HS8546V5, B618, B525
-  - ZTE: F609, F670L, F670Y, F680, MF286R
-  - TP-Link: XC220-G3v, Archer AX1800
-  - MikroTik: Semua RouterOS
-  - D-Link: Semua modem D-Link
-- ✅ 50+ Parameter TR-069 standar + vendor-specific
-- ✅ Auto-detect modem model & manufacturer
-- ✅ Realtime WebSocket dashboard
-- ✅ REST API lengkap
-- ✅ Bulk provisioning
-- ✅ Template ISP: Indihome, First Media, Biznet, MNC Play, XL Home
-- ✅ Auto monitoring device status (online/offline)
-- ✅ Docker & Docker Compose support
-- ✅ Event logging & history
-- ✅ Firmware update support
-- ✅ Reboot & Factory Reset via API
-- ✅ Full TypeScript support
-
-### 📋 Parameter yang didukung
-- Device Info & Status
-- WAN/PPPoe Configuration
-- WiFi 2.4GHz & 5GHz (SSID, password, channel, power)
-- GPON Optical Status (RX Power, TX Power, Temperature)
-- VOIP/SIP settings
-- IPTV Configuration (VLAN, IGMP)
-- LAN/DHCP Settings
-- NAT/Port Forwarding
-- Firewall & Security
-- Firmware Update Management
+### 🎉 Go-first Rewrite
+- Migrated from TypeScript/Node.js to Go
+- SQLite default database; PostgreSQL optional via env vars
+- `systemd` service managed by `install.sh`
+- Go 1.22+ enforced; installed from official go.dev binaries
+- REST API: `/health`, `/dashboard`, `/api/stats`, `/api/devices`, `/api/devices/import`
+- Bulk device provisioning via JSON import API
+- Live dashboard with 2-second polling
+- Graceful installer with conflict port detection and post-install health check
