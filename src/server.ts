@@ -1,4 +1,4 @@
-$newContent = @"
+$correctServerTs = @"
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -26,6 +26,10 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files untuk dashboard
+app.use(express.static('public'));
+app.use('/dashboard', express.static('public/dashboard'));
 
 // Socket.IO untuk realtime dashboard
 const io = new Server(server, {
@@ -73,4 +77,4 @@ async function initialize() {
 
 initialize();
 "@
-Set-Content -Path "h:\AUTO INSTALER GENIEACS\src\server.ts" -Value $newContent
+Set-Content -Path "h:\AUTO INSTALER GENIEACS\src\server.ts" -Value $correctServerTs
