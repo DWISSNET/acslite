@@ -45,3 +45,14 @@ coverage/
 *.temp
 .cache/
 .parcel-cache/
+
+# Go build artifacts
+acsgo/bin/
+acsgo/vendor/
+
+# Go environment
+acsgo/.env
+
+# Firmware files
+acsgo/firmware/
+firmware/

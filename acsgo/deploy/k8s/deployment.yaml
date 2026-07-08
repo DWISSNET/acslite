@@ -1,0 +1,276 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acsgo
+
+---
+# ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acsgo-config
+  namespace: acsgo
+data:
+  ENV: "production"
+  CWMP_PORT: "7547"
+  PORT: "7548"
+  METRICS_PORT: "9090"
+  LOG_LEVEL: "info"
+  PROMETHEUS_ENABLED: "true"
+
+---
+# Secret (base64-encoded values — replace with real secrets!)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: acsgo-secrets
+  namespace: acsgo
+type: Opaque
+stringData:
+  DATABASE_URL:    "******postgres-svc:5432/acsgo?sslmode=disable"
+  REDIS_URL:       "redis://:CHANGE_ME@redis-svc:6379"
+  RABBITMQ_URL:    "******rabbitmq-svc:5672/"
+  JWT_SECRET:      "change-me-in-production"
+  ACS_USERNAME:    "acsadmin"
+  ACS_PASSWORD:    ""
+
+---
+# CWMP StatefulSet (sticky sessions per pod)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: acsgo-cwmp
+  namespace: acsgo
+  labels:
+    app: acsgo
+    component: cwmp
+spec:
+  serviceName: acsgo-cwmp-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: acsgo
+      component: cwmp
+  template:
+    metadata:
+      labels:
+        app: acsgo
+        component: cwmp
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: acsgo
+          image: ghcr.io/dwissnet/acsgo:latest
+          imagePullPolicy: Always
+          ports:
+            - name: cwmp
+              containerPort: 7547
+              protocol: TCP
+            - name: api
+              containerPort: 7548
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: acsgo-config
+            - secretRef:
+                name: acsgo-secrets
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 7548
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 7548
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+
+---
+# Headless service for StatefulSet pod discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: acsgo-cwmp-headless
+  namespace: acsgo
+spec:
+  clusterIP: None
+  selector:
+    app: acsgo
+    component: cwmp
+  ports:
+    - name: cwmp
+      port: 7547
+
+---
+# External CWMP service (LoadBalancer for device connections)
+apiVersion: v1
+kind: Service
+metadata:
+  name: acsgo-cwmp-lb
+  namespace: acsgo
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+spec:
+  type: LoadBalancer
+  selector:
+    app: acsgo
+    component: cwmp
+  ports:
+    - name: cwmp
+      port: 7547
+      targetPort: 7547
+      protocol: TCP
+
+---
+# API Deployment (stateless, multiple replicas)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acsgo-api
+  namespace: acsgo
+  labels:
+    app: acsgo
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: acsgo
+      component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: acsgo
+        component: api
+    spec:
+      containers:
+        - name: acsgo
+          image: ghcr.io/dwissnet/acsgo:latest
+          imagePullPolicy: Always
+          ports:
+            - name: api
+              containerPort: 7548
+            - name: metrics
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: acsgo-config
+            - secretRef:
+                name: acsgo-secrets
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 7548
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 7548
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+
+---
+# API Service (ClusterIP + Ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: acsgo-api-svc
+  namespace: acsgo
+spec:
+  selector:
+    app: acsgo
+    component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 7548
+
+---
+# HPA — auto-scale CWMP pods based on CPU
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: acsgo-cwmp-hpa
+  namespace: acsgo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: acsgo-cwmp
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# Ingress for API/Dashboard
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acsgo-ingress
+  namespace: acsgo
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/websocket-services: "acsgo-api-svc"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - acs.example.com
+      secretName: acsgo-tls
+  rules:
+    - host: acs.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: acsgo-api-svc
+                port:
+                  number: 80
