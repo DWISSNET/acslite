@@ -11,6 +11,7 @@ curl -fsSL https://raw.githubusercontent.com/DWISSNET/acslite/main/install.sh | 
 Installer behavior:
 - Builds ACSGO from this repository source
 - Installs/updates a `systemd` service (`acsgo.service`)
+- Installs/updates **Go 1.22+** from official Go binaries
 - Uses **SQLite by default** (`/var/lib/acsgo/acsgo.db`)
 - Supports **PostgreSQL optionally** via env vars
 
@@ -49,6 +50,12 @@ Health endpoint:
 
 ```bash
 curl http://127.0.0.1:7548/health
+```
+
+Dashboard endpoint:
+
+```bash
+open http://127.0.0.1:7548/dashboard
 ```
 
 ## Troubleshooting
