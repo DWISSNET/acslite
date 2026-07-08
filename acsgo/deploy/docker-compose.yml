@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  acsgo:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: acsgo
+    restart: unless-stopped
+    ports:
+      - "7547:7547"   # CWMP/TR-069
+      - "7548:7548"   # Web dashboard + API
+    volumes:
+      - acsgo-data:/data
+    environment:
+      ENV: production
+      CWMP_PORT: 7547
+      PORT: 7548
+      DB_TYPE: sqlite
+      DB_URL: /data/acsgo.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@acsgo.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7548/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional: PostgreSQL backend (uncomment to use)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: acsgo-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: acsgo
+  #     POSTGRES_USER: acsgo
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acsgo_password}
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U acsgo"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  acsgo-data:
+  # postgres-data:
