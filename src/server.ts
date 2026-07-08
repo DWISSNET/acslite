@@ -1,3 +1,4 @@
+$newContent = @"
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -10,9 +11,15 @@ import logger from './utils/logger';
 import routes from './routes';
 import './services/scheduler';
 
+// Declare global io type untuk TypeScript
+declare global {
+  var io: Server;
+}
+
 const app = express();
 const server = http.createServer(app);
-const PORT = process.env.PORT || 7547; // Port standar TR-069
+const CWMP_PORT = Number(process.env.CWMP_PORT) || 7547;  // Port TR-069 standar
+const WEB_PORT = Number(process.env.PORT) || 7548;        // Port web/dashboard
 
 // Middleware
 app.use(helmet());
@@ -41,13 +48,13 @@ async function initialize() {
 
     // Start CWMP/TR-069 Server
     await startCWMPserver(server);
-    logger.info('✅ CWMP Server started on port 7547');
+    logger.info(`✅ CWMP Server started on port ${CWMP_PORT}`);
 
-    // Web server
-    server.listen(PORT + 1, () => {
-      logger.info(`✅ Web Server running on http://localhost:${PORT + 1}`);
-      logger.info(`✅ Dashboard: http://localhost:${PORT + 1}/dashboard`);
-      logger.info(`✅ CWMP/TR-069: :7547 (standar ACS port)`);
+    // Web server listen di SEMUA interface (bukan cuma localhost!)
+    server.listen(WEB_PORT, '0.0.0.0', () => {
+      logger.info(`✅ Web Server running on http://0.0.0.0:${WEB_PORT}`);
+      logger.info(`✅ Dashboard: http://0.0.0.0:${WEB_PORT}/dashboard`);
+      logger.info(`✅ CWMP/TR-069: :${CWMP_PORT} (standar ACS port)`);
     });
 
     // Socket connection
@@ -65,3 +72,5 @@ async function initialize() {
 }
 
 initialize();
+"@
+Set-Content -Path "h:\AUTO INSTALER GENIEACS\src\server.ts" -Value $newContent
