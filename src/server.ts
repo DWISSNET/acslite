@@ -48,34 +48,34 @@ async function initialize() {
   try {
     // Koneksi MongoDB
     await connectDB();
-    logger.info('✅ MongoDB connected successfully');
+    logger.info(' MongoDB connected successfully');
 
     // Koneksi Redis
     await redisClient.connect();
-    logger.info('✅ Redis connected successfully');
+    logger.info(' Redis connected successfully');
 
     // Start CWMP/TR-069 Server
     await startCWMPserver(server);
-    logger.info(`✅ CWMP Server started on port ${CWMP_PORT}`);
+    logger.info( CWMP Server started on port );
 
     // Web server listen di SEMUA interface (bukan cuma localhost!)
     server.listen(WEB_PORT, '0.0.0.0', () => {
-      logger.info(`✅ Web Server running on http://0.0.0.0:${WEB_PORT}`);
-      logger.info(`✅ Login page: http://0.0.0.0:${WEB_PORT}/login`);
-      logger.info(`✅ Dashboard: http://0.0.0.0:${WEB_PORT}/dashboard`);
-      logger.info(`✅ CWMP/TR-069: :${CWMP_PORT} (standar ACS port)`);
+      logger.info( Web Server running on http://0.0.0.0:);
+      logger.info( Login page: http://0.0.0.0:/login);
+      logger.info( Dashboard: http://0.0.0.0:/dashboard);
+      logger.info( CWMP/TR-069: : (standar ACS port));
     });
 
     // Socket connection
     io.on('connection', (socket) => {
-      logger.info(`Dashboard client connected: ${socket.id}`);
-      socket.on('disconnect', () => logger.info(`Client disconnected: ${socket.id}`));
+      logger.info(Dashboard client connected: );
+      socket.on('disconnect', () => logger.info(Client disconnected: ));
     });
 
     global.io = io;
 
   } catch (error) {
-    logger.error('❌ Failed to initialize server:', error);
+    logger.error(' Failed to initialize server:', error);
     process.exit(1);
   }
 }
