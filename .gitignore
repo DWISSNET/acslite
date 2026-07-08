@@ -45,3 +45,8 @@ coverage/
 *.temp
 .cache/
 .parcel-cache/
+# Go build artifacts
+acsgo/build/
+acsgo/data/
+coverage.out
+coverage.html
